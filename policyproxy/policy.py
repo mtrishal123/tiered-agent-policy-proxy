@@ -37,6 +37,7 @@ _NUMERIC_OPS = {"lt", "lte", "gt", "gte"}
 _OPS = _NUMERIC_OPS | {
     "eq",
     "regex",
+    "not_matches",
     "in",
     "not_in",
     "contains_any",
@@ -65,7 +66,7 @@ class Condition:
             raise PolicyError(f"condition on {raw['arg']!r} needs exactly one operator, got {ops or 'none'}")
         op = ops[0]
         value = raw[op]
-        if op == "regex":
+        if op in ("regex", "not_matches"):
             value = re.compile(value)
         elif op in ("contains_any", "not_contains_any"):
             value = tuple(str(v).lower() for v in value)
@@ -96,6 +97,8 @@ class Condition:
             return actual == self.value
         if self.op == "regex":
             return isinstance(actual, str) and self.value.fullmatch(actual) is not None
+        if self.op == "not_matches":
+            return isinstance(actual, str) and self.value.search(actual) is None
         if self.op in ("in", "not_in"):
             try:
                 member = actual in self.value

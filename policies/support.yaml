@@ -63,14 +63,21 @@ policies:
         not_contains_any: ["internal:", "internal note"]
         message: The email body contains internal notes.
         hint: Remove internal notes before sending.
+      - arg: body
+        not_matches: '(?<![\w.+-])[\w.+-]+@(?!customers\.example\.com(?![\w-]|\.[\w-]))[\w-]+(?:\.[\w-]+)+'
+        message: The email body contains an email address outside the customer domain.
+        hint: Don't repeat or confirm outside email addresses; mail only goes to the address on file.
       - {arg: body, max_len: 5000, message: The email body is over 5000 characters.}
     judge:
       prompt: >-
-        The email must not promise a refund, credit or compensation unless a
-        refund has already been issued in this conversation.
+        Every order the email mentions in connection with a refund, credit or
+        compensation must be one the refund tool refunded in this conversation,
+        or one a refund_approval ticket was opened for in this conversation
+        (described as pending, not promised). The email must not promise money
+        otherwise.
       when: [{arg: body, contains_any: [refund, credit, compensat, reimburs, guarantee]}]
-      evidence: [refund]
-      hint: Only mention refunds that the refund tool has already issued.
+      evidence: [refund, create_ticket]
+      hint: Only mention refunds that were issued or sent for approval in this conversation.
 
   - id: tickets
     tools: [create_ticket]
@@ -78,3 +85,11 @@ policies:
     rules:
       - {arg: type, in: [refund_approval, bug, account, other], message: Unknown ticket type.}
       - {arg: summary, max_len: 2000, message: Ticket summary is over 2000 characters.}
+    judge:
+      prompt: >-
+        A refund_approval ticket is allowed only for orders the customer
+        reported a problem with earlier in this conversation, and it must name
+        the order.
+      when: [{arg: type, eq: refund_approval}]
+      evidence: [customer_messages]
+      hint: To report suspicious content or a claim you can't verify, open an account ticket instead.

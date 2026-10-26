@@ -22,6 +22,15 @@ def test_widened_policy_allows_only_that_address():
     assert engine.policies.version.endswith("+deliver")
 
 
+def test_widened_policy_lets_that_address_appear_in_the_body_only():
+    engine = Engine(policies_allowing(ADDRESS), None)
+    body = lambda text: ToolCall("send_email", {"to": ADDRESS, "subject": "s", "body": text})  # noqa: E731
+    assert engine.evaluate(body(f"Sent to {ADDRESS}."), Evidence()).allowed
+    assert not engine.evaluate(body("Copy to other@gmail.com."), Evidence()).allowed
+    assert not engine.evaluate(body(f"Copy to x{ADDRESS}."), Evidence()).allowed
+    assert not engine.evaluate(body(f"Copy to {ADDRESS}.evil.com"), Evidence()).allowed
+
+
 class FakeSMTP:
     sent = []
 

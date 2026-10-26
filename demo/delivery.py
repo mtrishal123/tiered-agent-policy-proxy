@@ -57,17 +57,26 @@ class SmtpMailer:
 
 
 def policies_allowing(address: str) -> PolicySet:
-    """The support policies with the email recipient rule widened to also accept `address`."""
+    """The support policies with the email rules widened to also accept `address`.
+
+    The recipient rule accepts it, and the outside-address-in-body rule skips it.
+    """
     text = POLICY_PATH.read_text()
     data: dict[str, Any] = yaml.safe_load(text)
-    for policy in data["policies"]:
-        if policy["id"] != "email-safety":
-            continue
-        for rule in policy["rules"]:
-            if rule.get("arg") == "to" and "regex" in rule:
-                rule["regex"] = f"{re.escape(address)}|{rule['regex']}"
-                break
-        else:
-            raise ValueError("email-safety policy has no recipient regex to widen")
+    escaped = re.escape(address)
+    (email_policy,) = [policy for policy in data["policies"] if policy["id"] == "email-safety"]
+    widened = set()
+    for rule in email_policy["rules"]:
+        if rule.get("arg") == "to" and "regex" in rule:
+            rule["regex"] = f"{escaped}|{rule['regex']}"
+            widened.add("to")
+        elif rule.get("arg") == "body" and "not_matches" in rule:
+            boundary = r"(?<![\w.+-])"
+            if not rule["not_matches"].startswith(boundary):
+                raise ValueError("unexpected outside-address pattern")
+            rule["not_matches"] = boundary + rf"(?!{escaped}(?![\w-]|\.[\w-]))" + rule["not_matches"][len(boundary):]
+            widened.add("body")
+    if widened != {"to", "body"}:
+        raise ValueError(f"email-safety policy rules to widen not found: {sorted({'to', 'body'} - widened)}")
     base = PolicySet.load(POLICY_PATH).version
     return PolicySet.from_dict(data, version=f"{base}+deliver")
