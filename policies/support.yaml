@@ -1,0 +1,80 @@
+# Policies for a customer-support agent.
+#
+# rules  -> tier 0: deterministic, run on every matching call
+# judge  -> tier 2: plain-English check, escalated only when every `when`
+#           condition holds; verdicts are cached (tier 1) by policy version,
+#           call and the `evidence` keys the judge reads
+# risk   -> read: allowed now, judged in the background
+#           mutate: judged before the action runs; on_failure applies if the
+#           judge times out or errors
+
+unmatched: block
+
+policies:
+  - id: no-destructive-tools
+    tools: ["delete_*", "drop_*"]
+    deny: true
+    message: Destructive tools are disabled for this agent.
+    hint: Open a ticket with create_ticket so a human can handle it.
+
+  - id: order-search-limits
+    tools: [search_orders]
+    risk: read
+    rules:
+      - {arg: customer_id, regex: 'c_\d+', message: customer_id must look like c_<number>.}
+      - {arg: limit, lte: 50, optional: true, message: Search limit is capped at 50., hint: Use limit <= 50 and paginate.}
+
+  - id: profile-access
+    tools: [get_customer_profile]
+    risk: read
+    judge:
+      prompt: Only access the profile of the customer this conversation is with (the session customer).
+      evidence: [session_customer]
+
+  - id: refund-limits
+    tools: [refund]
+    risk: mutate
+    on_failure: block
+    rules:
+      - {arg: order_id, regex: 'o_\d+', message: order_id must look like o_<number>.}
+      - {arg: amount, gt: 0, message: Refund amount must be positive.}
+      - arg: amount
+        lte: 500
+        message: Refunds above $500 need manager approval.
+        hint: Call create_ticket with type=refund_approval instead of refunding directly.
+    judge:
+      prompt: >-
+        A refund over $100 is allowed only if the customer reported a problem
+        with that specific order earlier in this conversation.
+      when: [{arg: amount, gt: 100}]
+      evidence: [customer_messages]
+      hint: Only refund orders the customer has reported a problem with.
+
+  - id: email-safety
+    tools: [send_email]
+    risk: mutate
+    on_failure: block
+    rules:
+      - arg: to
+        regex: '[^@\s]+@customers\.example\.com'
+        message: Email can only go to customer addresses.
+        hint: Send to the customer's address on file.
+      - arg: body
+        not_contains_any: ["internal:", "internal note"]
+        message: The email body contains internal notes.
+        hint: Remove internal notes before sending.
+      - {arg: body, max_len: 5000, message: The email body is over 5000 characters.}
+    judge:
+      prompt: >-
+        The email must not promise a refund, credit or compensation unless a
+        refund has already been issued in this conversation.
+      when: [{arg: body, contains_any: [refund, credit, compensat, reimburs, guarantee]}]
+      evidence: [refund]
+      hint: Only mention refunds that the refund tool has already issued.
+
+  - id: tickets
+    tools: [create_ticket]
+    risk: mutate
+    rules:
+      - {arg: type, in: [refund_approval, bug, account, other], message: Unknown ticket type.}
+      - {arg: summary, max_len: 2000, message: Ticket summary is over 2000 characters.}
