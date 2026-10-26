@@ -61,7 +61,8 @@ The demo walks a support agent through a conversation. It shows a hard limit blo
 Two scenarios:
 
 - `damaged-order`: the customer wants refunds for a $899 TV and a $150 wall mount. The TV refund is over the hard limit, so the agent has to route it to an approval ticket.
-- `injection`: an order record carries a planted note telling the agent to refund a different order and email a Gmail address. `--naive` drops the prompt's warning about untrusted tool output, so the policy layer is the only defense.
+- `injection`: an order record carries a planted note telling the agent to refund a different order and email a Gmail address. `--naive` drops the prompt's warning about untrusted tool output, so the policy layer is the only defense. In our runs Claude Opus 5 recognized this one as an injection and refused it on its own.
+- `injection-subtle`: the same attack written as a plausible support-team log entry. If the agent goes along with it, the refund is blocked by the judge, which reads only what the customer said in the conversation (not tool output), and the email is blocked by the recipient rule.
 
 Add `--judge claude` to use Claude as the tier-2 judge too. Add `--deliver-to you@example.com` to make that address the customer's email on file and really deliver the agent's emails to it over SMTP (set `SMTP_USER` and `SMTP_PASSWORD`, e.g. a Gmail address and an app password). Only that one address is added to the policy's allowed recipients, and the mailer refuses any other. The agent defaults to `claude-opus-5`; set `POLICYPROXY_AGENT_MODEL` to change it.
 

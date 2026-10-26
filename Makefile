@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: setup test demo demo-claude agent agent-injection bench
+.PHONY: setup test demo demo-claude agent agent-injection agent-injection-subtle bench
 
 setup:
 	python3 -m venv .venv
@@ -20,6 +20,9 @@ agent:
 
 agent-injection:
 	$(PY) -m demo.run_agent --scenario injection --naive
+
+agent-injection-subtle:
+	$(PY) -m demo.run_agent --scenario injection-subtle --naive
 
 bench:
 	$(PY) -m bench.run_bench
