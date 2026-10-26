@@ -8,6 +8,7 @@ credentials (ANTHROPIC_API_KEY).
     python -m demo.run_agent --scenario injection     # malicious note planted in an order record
     python -m demo.run_agent --judge claude           # Claude as the tier-2 judge too
     python -m demo.run_agent --scenario injection --naive   # drop the prompt's injection warning
+    python -m demo.run_agent --deliver-to you@gmail.com     # really send the summary email (needs SMTP_USER/SMTP_PASSWORD)
 """
 
 from __future__ import annotations
@@ -57,6 +58,7 @@ def main() -> None:
     parser.add_argument("--scenario", choices=sorted(SCENARIOS), default="damaged-order")
     parser.add_argument("--judge", choices=["sim", "claude"], default="sim")
     parser.add_argument("--naive", action="store_true", help="leave the injection warning out of the agent's system prompt")
+    parser.add_argument("--deliver-to", metavar="ADDRESS", help="use ADDRESS as the customer's email and really deliver mail to it")
     args = parser.parse_args()
     scenario = SCENARIOS[args.scenario]
 
@@ -73,7 +75,17 @@ def main() -> None:
 
     backend = FakeBackend()
     scenario.setup(backend)
-    engine = Engine(PolicySet.load(POLICY_PATH), judge, judge_timeout_s=10 if args.judge == "claude" else 1.5)
+    policies = PolicySet.load(POLICY_PATH)
+    if args.deliver_to:
+        from demo.delivery import SmtpMailer, policies_allowing
+
+        try:
+            backend.mailer = SmtpMailer.from_env(args.deliver_to)
+        except RuntimeError as error:
+            sys.exit(str(error))
+        backend.profile_email = args.deliver_to
+        policies = policies_allowing(args.deliver_to)
+    engine = Engine(policies, judge, judge_timeout_s=10 if args.judge == "claude" else 1.5)
     guard = Guard(engine, backend.tools(), Evidence({"session_customer": [scenario.customer_id]}), tracer=trace)
     support = SupportAgent(guard, scenario.customer_id, on_text=agent, warn_about_injection=not args.naive)
 
@@ -81,6 +93,8 @@ def main() -> None:
     print(f"agent: {support.model}   judge: {judge_label}   policies: version {engine.policies.version}")
     if args.naive:
         print("system prompt: no injection warning (--naive)")
+    if args.deliver_to:
+        print(f"real delivery: on, only to {args.deliver_to} (sent from {backend.mailer.user})")
 
     try:
         for turn in scenario.turns:

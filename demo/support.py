@@ -55,6 +55,8 @@ class FakeBackend:
         self.tickets: list[dict[str, Any]] = []
         self.fail_next: set[str] = set()
         self.order_notes: dict[str, str] = {}
+        self.profile_email: str | None = None  # overrides the address on file (demo --deliver-to)
+        self.mailer: Any = None  # if set, send_email really delivers through it
 
     def _maybe_fail(self, tool: str) -> None:
         if tool in self.fail_next:
@@ -74,7 +76,8 @@ class FakeBackend:
         return orders[:limit]
 
     def get_customer_profile(self, customer_id: str) -> dict[str, Any]:
-        return {"customer_id": customer_id, "email": f"{customer_id}@customers.example.com", "tier": "gold"}
+        email = self.profile_email or f"{customer_id}@customers.example.com"
+        return {"customer_id": customer_id, "email": email, "tier": "gold"}
 
     def refund(self, order_id: str, amount: float) -> dict[str, Any]:
         self._maybe_fail("refund")
@@ -84,6 +87,8 @@ class FakeBackend:
 
     def send_email(self, to: str, subject: str, body: str) -> dict[str, Any]:
         self._maybe_fail("send_email")
+        if self.mailer is not None:
+            self.mailer.send(to, subject, body)
         self.emails.append({"to": to, "subject": subject, "body": body})
         return {"status": "sent", "to": to}
 
