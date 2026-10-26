@@ -92,6 +92,11 @@ def main() -> None:
     except anthropic.AuthenticationError:
         sys.stdout.flush()
         sys.exit("No valid Anthropic credentials. Set ANTHROPIC_API_KEY and try again.")
+    except anthropic.APIStatusError as error:
+        sys.stdout.flush()
+        body = error.body if isinstance(error.body, dict) else {}
+        message = body.get("error", {}).get("message") or str(error)
+        sys.exit(f"Anthropic API error ({error.status_code}): {message}")
 
     engine.close()
     for flag in engine.flags:
