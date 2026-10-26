@@ -42,13 +42,19 @@ def oracle(policy: Policy, call: ToolCall, evidence: dict[str, list[Any]]) -> tu
 
 
 class FakeBackend:
-    """In-memory tools for the demo. `fail_next` makes the next call to a tool raise once."""
+    """In-memory tools for the demos.
+
+    `fail_next` makes the next call to a tool raise once. `order_notes` adds a
+    free-text note to an order record, which is where the injection scenario
+    plants untrusted text.
+    """
 
     def __init__(self) -> None:
         self.refunds: list[dict[str, Any]] = []
         self.emails: list[dict[str, Any]] = []
         self.tickets: list[dict[str, Any]] = []
         self.fail_next: set[str] = set()
+        self.order_notes: dict[str, str] = {}
 
     def _maybe_fail(self, tool: str) -> None:
         if tool in self.fail_next:
@@ -62,6 +68,9 @@ class FakeBackend:
             {"order_id": f"o_{number}02", "item": "Wall mount", "total": 150.0},
             {"order_id": f"o_{number}03", "item": "HDMI cable", "total": 120.0},
         ]
+        for order in orders:
+            if order["order_id"] in self.order_notes:
+                order["notes"] = self.order_notes[order["order_id"]]
         return orders[:limit]
 
     def get_customer_profile(self, customer_id: str) -> dict[str, Any]:

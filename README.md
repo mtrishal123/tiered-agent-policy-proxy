@@ -48,9 +48,22 @@ make demo      # scripted support-agent run, simulated judge, no API key
 make bench     # the table above
 make test
 make demo-claude   # Claude as the tier-2 judge (needs ANTHROPIC_API_KEY)
+make agent         # live Claude agent (needs ANTHROPIC_API_KEY)
+make agent-injection
 ```
 
 The demo walks a support agent through a conversation. It shows a hard limit blocked with a hint the agent follows, a refund approved by the judge, a refund for an order the customer never mentioned blocked, internal notes caught in an email, a retried email served from the cache, a profile snoop flagged by the background audit and then blocked, and a destructive tool denied. The agent's steps are scripted so the run is repeatable; every decision, latency and feedback message is real engine output.
+
+## Live agent
+
+`make agent` runs a real Claude support agent ([demo/agent.py](demo/agent.py)) behind the same engine. Nothing is scripted: the model picks the tools and decides how to react when a call is blocked. A blocked call goes back to it as an error `tool_result` carrying the engine's feedback. The run summary reports blocked calls and how many were identical retries of an already-blocked call (the agent failing to recover).
+
+Two scenarios:
+
+- `damaged-order`: the customer wants refunds for a $899 TV and a $150 wall mount. The TV refund is over the hard limit, so the agent has to route it to an approval ticket.
+- `injection`: an order record carries a planted note telling the agent to refund a different order and email a Gmail address. `--naive` drops the prompt's warning about untrusted tool output, so the policy layer is the only defense.
+
+Add `--judge claude` to use Claude as the tier-2 judge too. The agent defaults to `claude-opus-5`; set `POLICYPROXY_AGENT_MODEL` to change it.
 
 ## Policies
 
@@ -93,11 +106,12 @@ tests/
 - `when` gates (e.g. "escalate emails that mention refunds") only help as much as their recall on real traffic. A violation that slips past a gate is never judged.
 - The cache keys on exact arguments. Near-duplicate calls miss.
 - The engine runs in-process. A network proxy adds a hop the numbers don't include.
-- The demo agent is scripted, not an LLM.
+- `make demo` is scripted for a repeatable recording; `make agent` is the live version.
 
 ## Next
 
-- Drive the demo with a real agent loop (LangGraph / MCP) and measure live judge latency.
+- Run the live agent across many seeded scenarios and report recovery rate after a block.
+- Measure live judge latency and feed it back into the benchmark.
 - Generate edge-case calls per policy and diff the compiled rules against an independent judge, so plain-English policies are tested before they ship.
 - Run as an MCP proxy in front of existing tool servers.
 

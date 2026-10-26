@@ -10,48 +10,11 @@ decisions, latencies and feedback are real engine output.
 from __future__ import annotations
 
 import argparse
-import json
-import sys
 from collections import Counter
 
+from demo.console import agent, note, paint, trace
 from demo.support import POLICY_PATH, FakeBackend, oracle
-from policyproxy import Engine, Evidence, Guard, PolicySet, SimulatedJudge, Tier
-from policyproxy.types import Decision, ToolCall
-
-USE_COLOR = sys.stdout.isatty()
-
-
-def paint(text: str, code: str) -> str:
-    return f"\033[{code}m{text}\033[0m" if USE_COLOR else text
-
-
-TIER_COLOR = {
-    Tier.DETERMINISTIC: "36",
-    Tier.CACHE: "34",
-    Tier.JUDGE_ASYNC: "35",
-    Tier.JUDGE: "33",
-    Tier.JUDGE_FAILED: "31",
-}
-
-
-def trace(call: ToolCall, decision: Decision) -> None:
-    tier = paint(f"{decision.tier.value:<9}", TIER_COLOR[decision.tier])
-    verdict = paint("ALLOW", "32") if decision.allowed else paint("BLOCK", "1;31")
-    print(f"  {tier} {decision.latency_ms:>8.2f} ms  {verdict}  {call}")
-    if decision.allowed and decision.tier is Tier.JUDGE_ASYNC:
-        print(paint("                               allowed now; judge running in the background", "2"))
-    if not decision.allowed:
-        feedback = json.dumps({k: v for k, v in decision.feedback().items() if k != "note" and v}, indent=None)
-        print(paint(f"                               feedback -> {feedback}", "31"))
-
-
-def agent(text: str) -> None:
-    print(paint(f"\nagent: {text}", "1"))
-
-
-def note(text: str) -> None:
-    print(paint(f"  {text}", "2"))
-
+from policyproxy import Engine, Evidence, Guard, PolicySet, SimulatedJudge
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
